@@ -9,7 +9,6 @@ export default function AuthPage() {
   const url =
     "https://df4f8fe7-79a0-442f-b752-7850da74f2d2-00-2hj7ifobppsdn.pike.replit.dev";
 
-  // Possible values: null (no modal shows), "Login", "SignUp"
   const [modalShow, setModalShow] = useState(null);
   const handleShowSignUp = () => setModalShow("SignUp");
   const handleShowLogin = () => setModalShow("Login");
@@ -39,7 +38,7 @@ export default function AuthPage() {
     try {
       const res = await axios.post(`${url}/login`, { username, password });
       if (res.data && res.data.auth === true && res.data.token) {
-        setAuthToken(res.data.token); // Save token to localStorage.
+        setAuthToken(res.data.token);
         console.log("Login was successful, token saved");
       }
     } catch (error) {
