@@ -1,9 +1,9 @@
 import { Button, Col, Image, Nav, Row, Spinner } from "react-bootstrap";
-import { jwtDecode } from "jwt-decode";
-import { useEffect } from "react";
+// import { jwtDecode } from "jwt-decode";
+// import { useEffect } from "react";
 import ProfilePostCard from "./ProfilePostCard";
-import { useDispatch, useSelector } from "react-redux";
-import { fetchPostsByUser } from "../features/posts/postsSlice";
+import { useSelector } from "react-redux";
+// import { fetchPostsByUser } from "../features/posts/postsSlice";
 
 export default function ProfileMidBody() {
   const url =
@@ -11,18 +11,17 @@ export default function ProfileMidBody() {
   const pic =
     "https://pbs.twimg.com/profile_images/1587405892437221376/h167Jlb2_400x400.jpg";
 
-  const dispatch = useDispatch();
   const posts = useSelector((store) => store.posts.posts);
   const loading = useSelector((store) => store.posts.loading);
 
-  useEffect(() => {
-    const token = localStorage.getItem("authToken");
-    if (token) {
-      const decodedToken = jwtDecode(token);
-      const userId = decodedToken.id;
-      dispatch(fetchPostsByUser(userId));
-    }
-  }, [dispatch]);
+  // useEffect(() => {
+  //   const token = localStorage.getItem("authToken");
+  //   if (token) {
+  //     const decodedToken = jwtDecode(token);
+  //     const userId = decodedToken.id;
+  //     dispatch(fetchPostsByUser(userId));
+  //   }
+  // }, [dispatch]);
 
   return (
     <Col sm={6} className="bg-light" style={{ border: "1px solid lightgrey" }}>
