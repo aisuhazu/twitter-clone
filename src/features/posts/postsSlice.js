@@ -1,33 +1,147 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import axios from "axios";
-import { jwtDecode } from "jwt-decode";
-
-const BASE_URL =
-  "https://19bd3076-ac35-4289-b751-d533e5e247d9-00-aagfr8zx1fjw.pike.replit.dev";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
+import { db, storage } from "../../firebase";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 export const fetchPostsByUser = createAsyncThunk(
   "posts/fetchByUser",
   async (userId) => {
-    const response = await fetch(`${BASE_URL}/posts/user/${userId}`);
-    return response.json();
+    try {
+      const postsRef = collection(db, `users/${userId}/posts`);
+
+      const querySnapshot = await getDocs(postsRef);
+      const docs = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      return docs;
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
   }
 );
 
 export const savePost = createAsyncThunk(
   "posts/savePost",
-  async (postContent) => {
-    const token = localStorage.getItem("authToken");
-    const decode = jwtDecode(token);
-    const userId = decode.id;
+  async ({ userId, postContent, file }) => {
+    try {
+      let imageUrl = "";
+      console.log(file);
 
-    const data = {
-      title: "Post Title",
-      content: postContent,
-      user_id: userId,
-    };
+      if (file !== null) {
+        const imageRef = ref(storage, `posts/${file.name}`);
+        const response = await uploadBytes(imageRef, file);
+        imageUrl = await getDownloadURL(response.ref);
+      }
 
-    const response = await axios.post(`${BASE_URL}/posts`, data);
-    return response.data;
+      const postsRef = collection(db, `users/${userId}/posts`);
+      console.log(`users/${userId}/posts`);
+
+      const newPostRef = doc(postsRef);
+      console.log(postContent);
+      await setDoc(newPostRef, { content: postContent, likes: [], imageUrl });
+      const newPost = await getDoc(newPostRef);
+
+      const post = {
+        id: newPost.id,
+        ...newPost.data(),
+      };
+
+      return post;
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  }
+);
+
+export const updatePost = createAsyncThunk(
+  "posts/updatePost",
+  async ({ userId, postId, newPostContent, newFile }) => {
+    try {
+      let newImageUrl;
+      if (newFile) {
+        const imageRef = ref(storage, `posts/${newFile.name}`);
+        const response = await uploadBytes(imageRef, newFile);
+        newImageUrl = await getDownloadURL(response.ref);
+      }
+
+      const postRef = doc(db, `users/${userId}/posts/${postId}`);
+      const postSnap = await getDoc(postRef);
+
+      if (postSnap.exists()) {
+        const postData = postSnap.data();
+        const updatedData = {
+          ...postData,
+          content: newPostContent || postData.content,
+          imageUrl: newImageUrl || postData.imageUrl,
+        };
+
+        await updateDoc(postRef, updatedData);
+        const updatedPost = { id: postId, ...updatedData };
+        return updatedPost;
+      } else {
+        throw new Error("Post does not exist");
+      }
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  }
+);
+
+export const likePost = createAsyncThunk(
+  "posts/likePost",
+  async ({ userId, postId }) => {
+    try {
+      const postRef = doc(db, `users/${userId}/posts/${postId}`);
+
+      const docSnapshot = await getDoc(postRef);
+
+      if (docSnapshot.exists()) {
+        const postData = docSnapshot.data();
+        const likes = [...postData.likes, userId];
+
+        await setDoc(postRef, { ...postData, likes });
+      }
+
+      return { userId, postId };
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  }
+);
+
+export const removeLikeFromPost = createAsyncThunk(
+  "posts/removeLikeFromPost",
+  async ({ userId, postId }) => {
+    try {
+      const postRef = doc(db, `users/${userId}/posts/${postId}`);
+
+      const docSnapshot = await getDoc(postRef);
+
+      if (docSnapshot.exists()) {
+        const postData = docSnapshot.data();
+        const likes = postData.likes.filter((id) => id !== userId);
+
+        await setDoc(postRef, { ...postData, likes });
+      }
+
+      return { userId, postId };
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
   }
 );
 
@@ -35,14 +149,45 @@ export const savePost = createAsyncThunk(
 const postsSlice = createSlice({
   name: "posts",
   initialState: { posts: [], loading: true },
-  reducers: {},
   extraReducers: (builder) => {
-    builder.addCase(fetchPostsByUser.fulfilled, (state, action) => {
-      state.posts = action.payload;
-      state.loading = false;
-    }),
-      builder.addCase(savePost.fulfilled, (state, action) => {
+    builder
+      .addCase(fetchPostsByUser.fulfilled, (state, action) => {
+        state.posts = action.payload;
+        state.loading = false;
+      })
+      .addCase(savePost.fulfilled, (state, action) => {
         state.posts = [action.payload, ...state.posts];
+      })
+      .addCase(likePost.fulfilled, (state, action) => {
+        const { userId, postId } = action.payload;
+
+        const postIndex = state.posts.findIndex((post) => post.id === postId);
+
+        if (postIndex !== -1) {
+          state.posts[postIndex].likes.push(userId);
+        }
+      })
+      .addCase(removeLikeFromPost.fulfilled, (state, action) => {
+        const { userId, postId } = action.payload;
+
+        const postIndex = state.posts.findIndex((post) => post.id === postId);
+
+        if (postIndex !== -1) {
+          state.posts[postIndex].likes = state.posts[postIndex].likes.filter(
+            (id) => id !== userId
+          );
+        }
+      })
+      .addCase(updatePost.fulfilled, (state, action) => {
+        const updatedPost = action.payload;
+
+        const postIndex = state.posts.findIndex(
+          (post) => post.id === updatedPost.id
+        );
+
+        if (postIndex !== -1) {
+          state.posts[postIndex] = updatedPost;
+        }
       });
   },
 });
